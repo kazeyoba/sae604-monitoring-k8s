@@ -1,0 +1,72 @@
+- name: Ajout de la configuration pour l'observabilité
+  hosts: master[0]
+  become: true
+  tasks:
+    - name: Add Prometheus stable chart repo
+      kubernetes.core.helm_repository:
+        name: prometheus-community
+        repo_url: "https://prometheus-community.github.io/helm-charts"
+
+    - name: Add Grafana stable chart repo
+      kubernetes.core.helm_repository:
+        name: grafana
+        repo_url: "https://grafana.github.io/helm-charts"
+
+    - name: Deploy latest version of Prometheus chart inside namespace and create it
+      kubernetes.core.helm:
+        name: prometheus
+        chart_ref: prometheus-community/prometheus
+        release_namespace: monitoring
+        create_namespace: true
+        values:
+          server:
+            persistentVolume:
+              enabled: false
+
+    - name: Deploy latest version of Alertmanager chart inside namespace and create it
+      kubernetes.core.helm:
+        name: alertmanager
+        chart_ref: prometheus-community/prometheus
+        release_namespace: monitoring
+        create_namespace: true
+        values:
+          persistence:
+            enabled: true
+
+    - name: Deploy latest version of Grafana chart inside namespace and create it
+      kubernetes.core.helm:
+        name: grafana
+        chart_ref: grafana/grafana
+        release_namespace: monitoring
+        create_namespace: true
+
+    - name: Deploy latest version of Loki chart inside namespace and create it
+      kubernetes.core.helm:
+        name: loki
+        chart_ref: grafana/loki-stack
+        release_namespace: monitoring
+        create_namespace: true
+
+    - name: Declaration d'un Ingress pour Grafana
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: grafana-ingress
+            namespace: monitoring
+            annotations:
+              kubernetes.io/ingress.class: traefik
+          spec:
+            rules:
+              - host: monitoring.kube.lan
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: grafana
+                          port:
+                            number: 80

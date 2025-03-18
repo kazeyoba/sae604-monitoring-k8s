@@ -1,0 +1,20 @@
+---
+- name: Add HELM apt-key
+  ansible.builtin.get_url:
+    url: https://baltocdn.com/helm/signing.asc
+    dest: /etc/apt/keyrings/helm-apt-keyring.asc
+    mode: '0644'
+
+- name: Add HELM APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/helm-apt-keyring.asc] https://baltocdn.com/helm/stable/debian/ all main"
+    state: present
+    update_cache: true
+
+- name: Installer le package HELM
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: true
+  loop:
+    - helm

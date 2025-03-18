@@ -1,0 +1,63 @@
+- name: Ajout de la configuration réseau est Ingress
+  hosts: master[0]
+  become: true
+  tasks:
+    - name: Installation Calico CNI
+      ansible.builtin.command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+
+    - name: Installation Calico CNI
+      ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+
+    - name: Sleep for 30 seconds and continue with play
+      ansible.builtin.wait_for:
+        timeout: 30
+      delegate_to: localhost
+
+    - name: Create a IPPool
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            namespace: metallb-system
+            name: ippool
+          spec:
+            addresses:
+              - 172.16.20.100/32
+
+    - name: Create a L2Advertise
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: arpsetup
+            namespace: metallb-system
+          spec:
+            ipAddressPools:
+              - ippool
+
+    - name: Add Traefik stable chart repo
+      kubernetes.core.helm_repository:
+        name: traefik
+        repo_url: "https://traefik.github.io/charts"
+
+    - name: Deploy latest version of Traefik chart namespace and create it
+      kubernetes.core.helm:
+        name: traefik
+        chart_ref: traefik/traefik
+        release_namespace: traefik-ingress
+        create_namespace: true
+        values:
+          deployment:
+            kind: DaemonSet
+          providers:
+            kubernetesCRD:
+              enabled: true
+          service:
+            type: LoadBalancer
+          ingressRoute:
+            dashboard:
+              enabled: true

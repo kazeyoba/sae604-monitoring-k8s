@@ -1,0 +1,64 @@
+---
+- name: Disable SWAP since kubernetes can't work with swap enabled (1/2)
+  ansible.builtin.shell:
+    cmd: /usr/sbin/swapoff -a
+    executable: /bin/bash
+  register: swap_output
+  changed_when: swap_output.rc != 0
+
+- name: Disable SWAP in fstab since kubernetes can't work with swap enabled (2/2)
+  ansible.builtin.replace:
+    path: /etc/fstab
+    regexp: '^([^#].*?\sswap\s+sw\s+.*)$'
+    replace: '# \1'
+
+- name: Add the dummy module overlay and make sure it is loaded after reboots
+  community.general.modprobe:
+    name: overlay
+    state: present
+    persistent: present
+
+- name: Add the dummy module br_netfilter and make sure it is loaded after reboots
+  community.general.modprobe:
+    name: br_netfilter
+    state: present
+    persistent: present
+
+- name: Activation net.bridge.bridge-nf-call-iptables
+  ansible.posix.sysctl:
+    name: net.bridge.bridge-nf-call-iptables
+    value: '1'
+    sysctl_set: true
+    reload: true
+
+- name: Activation net.ipv4.ip_forward
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: true
+    reload: true
+
+- name: Activation net.bridge.bridge-nf-call-ip6tables
+  ansible.posix.sysctl:
+    name: net.bridge.bridge-nf-call-ip6tables
+    value: '1'
+    sysctl_set: true
+    reload: true
+
+- name: Install containerd
+  ansible.builtin.apt:
+    name: containerd
+    state: present
+    update_cache: true
+
+- name: Load default config containerd
+  ansible.builtin.shell: |
+    containerd config default > /etc/containerd/config.toml
+  register: config_output
+  changed_when: config_output.rc != 0
+
+- name: Patch Cgroups
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup\s*=\s*false'
+    replace: 'SystemdCgroup = true'

@@ -1,0 +1,163 @@
+- name: Initialisation du cluster Kubernetes et ajout des noeuds
+  hosts: master[0]
+  become: true
+  tasks:
+    - name: Vérifier si le cluster est déjà initialisé
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: kube_cluster
+
+    - name: Initialiser le cluster Kubernetes
+      ansible.builtin.command: kubeadm init --control-plane-endpoint "172.16.20.99:6443" --upload-certs --pod-network-cidr=192.168.0.0/16
+      when: not kube_cluster.stat.exists
+
+    - name: Créer le dossier .kube pour l'utilisateur root
+      ansible.builtin.file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+      when: not kube_cluster.stat.exists
+
+    - name: Copier le fichier de configuration admin.conf
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: true
+        mode: '0644'
+      when: not kube_cluster.stat.exists
+
+    - name: Copier kubeconfig vers le bastion
+      ansible.builtin.fetch:
+        src: /etc/kubernetes/admin.conf
+        dest: ./kubeconfig-{{ inventory_hostname }}
+        flat: true
+      when: not kube_cluster.stat.exists
+
+    - name: Attendre que l'API Kubernetes soit disponible
+      ansible.builtin.command: kubectl get nodes
+      register: api_ready
+      retries: 30
+      delay: 1
+      until: api_ready.rc == 0
+
+    - name: Obtenir le token d'initialisation pour les workers
+      ansible.builtin.command: kubeadm token create --print-join-command
+      register: join_command
+      changed_when: false
+
+    - name: Partager la commande join avec les autres hôtes
+      ansible.builtin.set_fact:
+        kube_join_command: "{{ join_command.stdout }}"
+      delegate_to: localhost
+
+    - name: Obtenir le CERT-HASH d'initialisation pour les control-plans
+      ansible.builtin.shell: kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1
+      args:
+        executable: /bin/bash
+      register: join_cert_hash
+      changed_when: false
+
+    - name: Partager la commande join avec les autres hôtes
+      ansible.builtin.set_fact:
+        kube_join_command: "{{ join_command.stdout }}"
+      delegate_to: localhost
+
+
+
+- name: Ajout de la configuration réseau est Ingress
+  hosts: master[0]
+  become: true
+  tasks:
+    - name: Installation Calico CNI
+      ansible.builtin.command: kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml
+
+    - name: Sleep for 45 seconds and continue with play
+      ansible.builtin.wait_for:
+        timeout: 45
+      delegate_to: localhost
+
+    - name: Installation  MetalLB
+      ansible.builtin.command: kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.14.9/config/manifests/metallb-native.yaml
+
+- name: Ajouter les noeuds workers au cluster
+  hosts: worker
+  become: true
+  tasks:
+    - name: Vérifier si le noeud est déjà dans le cluster
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Joindre le cluster si le noeud n'est pas encore membre worker
+      ansible.builtin.command: "{{ hostvars[groups['master'][0]]['kube_join_command'] }}"
+      args:
+        creates: /etc/kubernetes/kubelet.conf
+      when: not kubelet_conf.stat.exists
+
+- name: Ajouter les autres noeuds au cluster - CONTROL-PLAN
+  hosts: master[1:]
+  become: true
+  tasks:
+    - name: Vérifier si le noeud est déjà dans le cluster
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Joindre le cluster en tant que control-plan
+      ansible.builtin.command: "{{ hostvars[groups['master'][0]]['kube_join_command'] }} --control-plane --certificate-key {{ hostvars[groups['master'][0]]['join_cert_hash']['stdout'] }}"
+      args:
+        creates: /etc/kubernetes/kubelet.conf
+      when: not kubelet_conf.stat.exists
+
+- name: Installation Traefik
+  hosts: master[0]
+  become: true
+  tasks:
+    - name: Create a IPPool
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            namespace: metallb-system
+            name: ippool
+          spec:
+            addresses:
+              - 172.16.20.100/32
+
+    - name: Create a L2Advertise
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: arpsetup
+            namespace: metallb-system
+          spec:
+            ipAddressPools:
+              - ippool
+
+    - name: Add Traefik stable chart repo
+      kubernetes.core.helm_repository:
+        name: traefik
+        repo_url: "https://traefik.github.io/charts"
+
+    - name: Deploy latest version of Traefik chart namespace and create it
+      kubernetes.core.helm:
+        name: traefik
+        chart_ref: traefik/traefik
+        release_namespace: traefik-ingress
+        create_namespace: true
+        values:
+          deployment:
+            kind: DaemonSet
+          providers:
+            kubernetesCRD:
+              enabled: true
+          service:
+            type: LoadBalancer
+          ingressRoute:
+            dashboard:
+              enabled: true

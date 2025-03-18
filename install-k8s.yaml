@@ -1,0 +1,24 @@
+---
+- hosts: all
+  become: true
+  roles:
+    - qemu-agent
+    - containerd
+    - kubernetes
+
+- hosts: master
+  become: true
+  roles:
+    - helm
+
+- hosts: master[0]
+  gather_facts: yes
+  become: yes
+  roles:
+    - role: keepalived/master
+
+- hosts: master[1:]
+  gather_facts: yes
+  become: yes
+  roles:
+    - role: keepalived/backup

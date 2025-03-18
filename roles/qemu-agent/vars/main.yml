@@ -1,0 +1,12 @@
+---
+# vars file for containerd
+modprobe_mod:
+  - overlay
+  - br_netfilter
+
+mod_systl:
+  - net.bridge.bridge-nf-call-iptables
+  - net.ipv4.ip_forward
+  - net.bridge.bridge-nf-call-ip6tables
+
+containerd_config_path: "/etc/containerd/config.toml"

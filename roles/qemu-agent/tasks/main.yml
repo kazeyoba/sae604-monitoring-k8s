@@ -1,0 +1,12 @@
+---
+- name: Installer QEMU Guest Agent
+  package:
+    name: qemu-guest-agent
+    state: present
+
+- name: Activer et démarrer le service QEMU Guest Agent
+  systemd:
+    name: qemu-guest-agent
+    enabled: yes
+    state: started
+  notify: Restart QEMU Guest Agent
