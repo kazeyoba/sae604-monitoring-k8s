@@ -60,7 +60,11 @@ Pour initialiser le cluster K8s :
 
 ```bash
 ansible-playbook -i inventory/inventaire.yaml init-k8s.yaml
-```  
+```
+
+```bash
+ansible-playbook -i inventory/inventaire.yaml install-monitoring.yaml
+```
 
 ## Vérification  
 
