@@ -22,6 +22,24 @@
           server:
             persistentVolume:
               enabled: false
+          serverFiles:
+            prometheus.yml:
+              rule_files:
+                - /etc/config/recording_rules.yml
+                - /etc/config/alerting_rules.yml
+              ## Below two files are DEPRECATED will be removed from this default values file
+                - /etc/config/rules
+                - /etc/config/alerts
+          
+              scrape_configs:
+                - job_name: prometheus
+                  static_configs:
+                    - targets:
+                      - localhost:9090
+                - job_name: prometheus-node-exporter-vm-deportee 
+                  static_configs: 
+                    - targets:
+                      - 172.16.20.36:9100
 
     - name: Deploy latest version of Alertmanager chart inside namespace and create it
       kubernetes.core.helm:
@@ -68,5 +86,29 @@
                       backend:
                         service:
                           name: grafana
+                          port:
+                            number: 80
+
+    - name: Declaration d'un Ingress pour Prometheus
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata:
+            name: prometheus-ingress
+            namespace: monitoring
+            annotations:
+              kubernetes.io/ingress.class: traefik
+          spec:
+            rules:
+              - host: prometheus.kube.lan
+                http:
+                  paths:
+                    - path: /
+                      pathType: Prefix
+                      backend:
+                        service:
+                          name: prometheus-server
                           port:
                             number: 80
