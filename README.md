@@ -176,7 +176,7 @@ sudo mv kubectl /usr/local/bin
 sudo chmod +x /usr/local/bin/kubectl
 ```
 
-Faire le'export :
+Faire l'export :
 
 ```bash
 export K8S_AUTH_KUBECONFIG=/chemin/vers/kubeconfig-master-00
@@ -266,3 +266,17 @@ Ressource : `stephane-robert.info` : https://blog.stephane-robert.info/docs/obse
 2. Jouer le playbook - `add-node-k8s.yaml`
 
 `ànsible-playbook -i inventory/inventaire.yaml add-nodes-k8s.yaml`
+
+# K9s - Terminal User Interface pour Kubernetes (exploration des objets Kubernetes)
+
+L'installation est similaire à `kubectl`
+
+Pour interragir avec le cluster en spécifiant le `kubeconfig` :
+
+```bash
+k9s --kubeconfig /chemin/vers/le/kubeconfig
+```
+
+https://enix.io/en/blog/k9s/
+
+https://blog.stephane-robert.info/docs/conteneurs/orchestrateurs/outils/k9s/
