@@ -1,5 +1,7 @@
 # Mise en place d'un cluster Kubernetes via playbook ANSIBLE
 
+**CONSEIL :** Après le playbook `install-k8s.yaml`, faire une snapshot avant l'initialisation du cluster.
+
 ## Architecture
 
 ![Architecture](img/mermaid-diagram-2025-03-20-153759.png)
@@ -90,6 +92,8 @@ Il faudra déclarer les entrées suivantes avec @IP de l'Ingress Traefik choisie
 monitoring.kube.lan A 172.16.20.100
 prometheus.kube.lan A 172.16.20.100
 ```
+
+Remplacez par `172.16.20.100` par l'@IP pour l'Ingress Traefik.
 
 ### Inventaire ansible
 
@@ -280,3 +284,58 @@ k9s --kubeconfig /chemin/vers/le/kubeconfig
 https://enix.io/en/blog/k9s/
 
 https://blog.stephane-robert.info/docs/conteneurs/orchestrateurs/outils/k9s/
+
+# Installation manuelle monitoring avec Dashboard déjà fait 
+
+Ne pas avoir exécuter le playbook : `install-monitoring.yaml`.
+
+Accès kubectl (master-00 ou depuis le poste de travail avec le kubeconfig-master-00).
+
+HELM doit être installer sur la machine où les commandes sont exécutées.
+
+Ajouter le dépôt :
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+```
+
+Créer le namespace et le définir comme contexte par défaut :
+
+```bash
+kubectl create ns monitoring
+kubectl config set-context --current --namespace=monitoring
+```
+
+Installation via HELM :
+
+```bash
+helm install prometheus prometheus-community/kube-prometheus-stack
+```
+
+Créer une règle dans notre Ingress Traefik `monitoring-ingress.yaml` :
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure # Force HTTPS
+spec:
+  rules:
+  - host: monitoring.kube.lan
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-grafana
+            port:
+              number: 80
+```
+
+Login : `admin`
+Password : `kubectl get secret grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo`
