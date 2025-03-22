@@ -1,5 +1,31 @@
 # Mise en place d'un cluster Kubernetes via playbook ANSIBLE
 
+## Architecture
+
+![Architecture](img/mermaid-diagram-2025-03-20-153759.png)
+
+### Dimensionnement
+
+Pour un cluster "Production Ready" :
+
+- 6 VM (4vCPU, 8Go RAM, Stockage 20Go pour du PoC)
+
+Pour un PoC (master - worker) :
+
+- 2 VM (4vCPU, 8Go RAM, Stockage 20Go pour du PoC)
+
+Pour un PoC - ressources faibles :
+
+- 2 VM (2vCPU, 4Go RAM, 20Go pour du PoC)
+
+> Peut être "ric rac" au niveau de la RAM.
+
+### Plan d'addressage
+
+- Il faudra une @IP par nœud.  
+- Il faudra une @IP dédiée à la VIP ([IP Failover](https://www.aukfood.fr/ip-failover-avec-hearbeat-et-pacemaker/#:~:text=On%20appelle%20IP%20flottante%20une,parle%20aussi%20d%27IP%20failover.)), qui servira à accéder au control-plan.  
+- Il faudra une @IP dédiée à l'[Ingress Traefik](https://kubernetes.io/docs/concepts/services-networking/ingress/), qui permettra de créer des règles (host, vpath) pour exposer des pods vers l'extérieur.  
+
 
 Faire les exports :
 
@@ -9,11 +35,9 @@ export K8S_AUTH_KUBECONFIG=/root/.kube/config
 
 ## Avant exécution  
 
-Le cluster fonctionne avec une IP Failover.  
+Il faudra définir dans votre plan réseau une VIP, par exemple dans `172.16.20.0/24`, avec une VIP à `172.16.20.99`, qui permettra d'accéder au control-plan.  
 
-Il faudra définir dans votre plan réseau une VIP, par exemple dans `172.16.20.0/24`, avec une VIP à `172.16.20.99`.  
-
-Si le plan d'adressage est différent :  
+Si le plan d'adressage/et ou la VIP est différents :  
 
 Éditez les fichiers suivants :  
 
