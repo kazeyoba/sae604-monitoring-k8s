@@ -1,0 +1,67 @@
+- name: Récupération des commandes de joins et CERT-HASH
+  hosts: master[0]
+  become: true
+  tasks:
+    - name: Vérifier si le cluster est déjà initialisé
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: kube_cluster
+
+    - name: Attendre que l'API Kubernetes soit disponible
+      ansible.builtin.command: kubectl get nodes
+      register: api_ready
+      retries: 30
+      delay: 1
+      until: api_ready.rc == 0
+
+    - name: Obtenir le token d'initialisation pour les workers
+      ansible.builtin.command: kubeadm token create --print-join-command
+      register: join_command
+      changed_when: false
+
+    - name: Partager la commande join avec les autres hôtes
+      ansible.builtin.set_fact:
+        kube_join_command: "{{ join_command.stdout }}"
+      delegate_to: localhost
+
+    - name: Obtenir le CERT-HASH d'initialisation pour les control-plans
+      ansible.builtin.shell: kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1
+      args:
+        executable: /bin/bash
+      register: join_cert_hash
+      changed_when: false
+
+    - name: Partager la commande join avec les autres hôtes
+      ansible.builtin.set_fact:
+        kube_join_command: "{{ join_command.stdout }}"
+      delegate_to: localhost
+
+- name: Ajouter les noeuds en tant que control-plan dans le cluster
+  hosts: worker
+  become: true
+  tasks:
+    - name: Vérifier si le noeud est déjà dans le cluster
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Joindre le cluster si le noeud n'est pas dans le cluster en tant que worker
+      ansible.builtin.command: "{{ hostvars[groups['master'][0]]['kube_join_command'] }}"
+      args:
+        creates: /etc/kubernetes/kubelet.conf
+      when: not kubelet_conf.stat.exists
+
+- name: Ajouter les noeuds en tant que control-plan dans le cluster
+  hosts: master[1:]
+  become: true
+  tasks:
+    - name: Vérifier si le noeud est déjà dans le cluster
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Joindre le cluster en tant que control-plan
+      ansible.builtin.command: "{{ hostvars[groups['master'][0]]['kube_join_command'] }} --control-plane --certificate-key {{ hostvars[groups['master'][0]]['join_cert_hash']['stdout'] }}"
+      args:
+        creates: /etc/kubernetes/kubelet.conf
+      when: not kubelet_conf.stat.exists

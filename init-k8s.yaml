@@ -62,8 +62,6 @@
         kube_join_command: "{{ join_command.stdout }}"
       delegate_to: localhost
 
-
-
 - name: Ajout de la configuration réseau est Ingress
   hosts: master[0]
   become: true
@@ -88,13 +86,13 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
-    - name: Joindre le cluster si le noeud n'est pas encore membre worker
+    - name: Joindre le cluster si le noeud n'est pas dans le cluster
       ansible.builtin.command: "{{ hostvars[groups['master'][0]]['kube_join_command'] }}"
       args:
         creates: /etc/kubernetes/kubelet.conf
       when: not kubelet_conf.stat.exists
 
-- name: Ajouter les autres noeuds au cluster - CONTROL-PLAN
+- name: Ajouter les noeuds control-plan dans le cluster
   hosts: master[1:]
   become: true
   tasks:
@@ -103,7 +101,7 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
-    - name: Joindre le cluster en tant que control-plan
+    - name: Joindre le cluster si le noeud n'est pas dans le cluster
       ansible.builtin.command: "{{ hostvars[groups['master'][0]]['kube_join_command'] }} --control-plane --certificate-key {{ hostvars[groups['master'][0]]['join_cert_hash']['stdout'] }}"
       args:
         creates: /etc/kubernetes/kubelet.conf

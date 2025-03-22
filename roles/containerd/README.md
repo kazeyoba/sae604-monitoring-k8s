@@ -1,7 +1,7 @@
 Role Name
 =========
 
-A brief description of the role goes here.
+Installation de containerd
 
 Requirements
 ------------
@@ -33,4 +33,4 @@ License
 Free to use
 ------------------
 
-An optional section for the role authors to include contact information, or a website (HTML is not allowed).
+Uniquement pour IUT de Saint-Malo DevCloud dans le cadre accadémique.
