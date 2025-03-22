@@ -322,7 +322,6 @@ metadata:
   namespace: monitoring
   annotations:
     kubernetes.io/ingress.class: traefik
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure # Force HTTPS
 spec:
   rules:
   - host: monitoring.kube.lan
@@ -335,6 +334,12 @@ spec:
             name: prometheus-grafana
             port:
               number: 80
+```
+
+Puis faire :
+
+```bash
+kubectl apply -f monitoring-ingress.yaml
 ```
 
 Login : `admin`
